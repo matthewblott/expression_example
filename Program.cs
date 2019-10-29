@@ -11,6 +11,8 @@ namespace expression_example
   {
     private static readonly List<User> UserData = UserDataSeed();
 
+    private static IDictionary<string, object> Cache = new Dictionary<string, object>();
+    
     private static void Main(string[] args)
     {
       const string propertyName = "LastName";
@@ -19,7 +21,24 @@ namespace expression_example
       var dn = GetDynamicQueryWithExpresionTrees0(propertyName, value);
       var q = UserData.Where(dn);
 
-      var output0 = q.ToList();
+      var output = q.ToList();
+      
+      foreach (var item in output)
+      {
+        Console.WriteLine("Filtered result:");
+        Console.WriteLine($"\t Id: {item.Id}");
+        Console.WriteLine($"\t First Name: {item.FirstName}");
+        Console.WriteLine($"\t Last Name: {item.LastName}");
+      }
+      
+      // Now use the cached version
+      const string propertyName0 = "LastName";
+      const string value0 = "a";
+      
+      var dn0 = GetDynamicQueryWithExpresionTrees0(propertyName0, value0);
+      var q0 = UserData.Where(dn);
+
+      var output0 = q0.ToList();
       
       foreach (var item in output0)
       {
@@ -28,6 +47,7 @@ namespace expression_example
         Console.WriteLine($"\t First Name: {item.FirstName}");
         Console.WriteLine($"\t Last Name: {item.LastName}");
       }
+
     }
 
     private static List<User> UserDataSeed()
@@ -53,6 +73,16 @@ namespace expression_example
 
     private static Func<User, bool> GetDynamicQueryWithExpresionTrees0(string propertyName, string value)
     {
+      // cache with key of Expression + model + propertyName + value
+      var key = $"{nameof(User)}-{propertyName}+{value}";
+
+      var expression = FindCachedExpression(key);
+
+      if (expression != null)
+      {
+        return (Func<User, bool>) expression;
+      }
+      
       // System.String ToLower()
       MethodInfo toLower = typeof(string).GetMethod(nameof(string.ToLower), new Type[] { });
       
@@ -80,8 +110,21 @@ namespace expression_example
       // x => x.LastName.ToLower().Contains("a")
       Expression<Func<User, bool>> final = Expression.Lambda<Func<User, bool>>(containsMethodBody, parameter);
 
-      return final.Compile();
+      var compiled = final.Compile();
+
+      Cache.Add(key, compiled);
       
+      return compiled;
+
+    }
+
+    private static object FindCachedExpression(string key)
+    {
+      var q =
+        from x in Cache where x.Key == key select x.Value;
+
+      return q.FirstOrDefault();
+
     }
     
     private static UnaryExpression GetValueExpression(string propertyName, string val, ParameterExpression param)
